@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Edit3, Users, Trophy, Heart, Calendar } from 'lucide-react'
+import { Settings, Edit3, Users, Trophy, Heart, Calendar, CheckCircle2, MoreHorizontal, MessageCircle } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Avatar, AvatarFallback } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
-import { User } from '../../types'
+import { User, Post } from '../../types'
+import { getUserPosts } from '../../utils/posts'
 
 interface ProfileProps {
   user: User
@@ -15,6 +16,99 @@ interface ProfileProps {
 export default function Profile({ user }: ProfileProps) {
   const [followers] = useState(1247)
   const [following] = useState(89)
+  const [publicPosts, setPublicPosts] = useState<Post[]>([])
+  const [privatePosts, setPrivatePosts] = useState<Post[]>([])
+
+  useEffect(() => {
+    // Load user's posts
+    setPublicPosts(getUserPosts(user.id, true))
+    setPrivatePosts(getUserPosts(user.id, false))
+  }, [user.id])
+
+  // Refresh posts when checklist updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPublicPosts(getUserPosts(user.id, true))
+      setPrivatePosts(getUserPosts(user.id, false))
+    }, 1000) // Check every second for demo purposes
+
+    return () => clearInterval(interval)
+  }, [user.id])
+
+  const formatTimeAgo = (date: Date) => {
+    const now = new Date()
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+    
+    if (diffInMinutes < 1) return 'now'
+    if (diffInMinutes < 60) return `${diffInMinutes}m`
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`
+    return `${Math.floor(diffInMinutes / 1440)}d`
+  }
+
+  const PostCard = ({ post }: { post: Post }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-4"
+    >
+      <Card className="glass-card">
+        <CardContent className="p-4">
+          {/* User Info */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-3">
+              <Avatar className="w-10 h-10">
+                <AvatarFallback className="bg-primary text-white font-semibold">
+                  {post.username.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold text-primary">@{post.username}</span>
+                  {user.isVerified && (
+                    <Badge variant="secondary" className="text-xs bg-primary/20 text-primary">
+                      ✓ verified
+                    </Badge>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {formatTimeAgo(post.createdAt)}
+                </span>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Post Content */}
+          <div className="mb-3">
+            <div className="flex items-start space-x-2">
+              <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+              <p className="text-sm leading-relaxed">{post.content}</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-2 border-t border-border/50">
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex items-center space-x-1 text-muted-foreground hover:text-foreground"
+              >
+                <Heart className="h-4 w-4" />
+                <span className="text-xs">{post.likes.length}</span>
+              </Button>
+              <Button variant="ghost" size="sm" className="flex items-center space-x-1 text-muted-foreground hover:text-foreground">
+                <MessageCircle className="h-4 w-4" />
+                <span className="text-xs">{post.comments.length}</span>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
 
   const stats = [
     {
@@ -165,29 +259,49 @@ export default function Profile({ user }: ProfileProps) {
 
           <TabsContent value="public" className="mt-4">
             <Card className="glass-card">
-              <CardContent className="p-8 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                  <Users className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="font-semibold mb-2">No public posts yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Complete public checklist items to share your progress!
-                </p>
-              </CardContent>
+              {publicPosts.length > 0 ? (
+                <CardContent className="p-4">
+                  <div className="space-y-4">
+                    {publicPosts.map(post => (
+                      <PostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+                </CardContent>
+              ) : (
+                <CardContent className="p-8 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                    <Users className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold mb-2">No public posts yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Complete public checklist items to share your progress!
+                  </p>
+                </CardContent>
+              )}
             </Card>
           </TabsContent>
 
           <TabsContent value="private" className="mt-4">
             <Card className="glass-card">
-              <CardContent className="p-8 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                  <Calendar className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="font-semibold mb-2">No private posts yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Complete private checklist items to track your personal progress!
-                </p>
-              </CardContent>
+              {privatePosts.length > 0 ? (
+                <CardContent className="p-4">
+                  <div className="space-y-4">
+                    {privatePosts.map(post => (
+                      <PostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+                </CardContent>
+              ) : (
+                <CardContent className="p-8 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                    <Calendar className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold mb-2">No private posts yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Complete private checklist items to track your personal progress!
+                  </p>
+                </CardContent>
+              )}
             </Card>
           </TabsContent>
         </Tabs>

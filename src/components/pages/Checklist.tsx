@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Trash2, Calendar } from 'lucide-react'
 import { Button } from '../ui/button'
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../ui/alert-dialog'
 import { User, ChecklistItem } from '../../types'
+import { createChecklistPost, deletePostsByChecklistItem } from '../../utils/posts'
 import toast from 'react-hot-toast'
 
 interface ChecklistProps {
@@ -49,11 +50,15 @@ const mockItems: ChecklistItem[] = [
 ]
 
 export default function Checklist({ user }: ChecklistProps) {
-  const [items, setItems] = useState<ChecklistItem[]>(mockItems)
+  const [items, setItems] = useState<ChecklistItem[]>([])
   const [newItemText, setNewItemText] = useState('')
   const [newItemType, setNewItemType] = useState<'daily' | 'oneoff'>('daily')
   const [newItemVisibility, setNewItemVisibility] = useState<'public' | 'private'>('public')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+
+  useEffect(() => {
+    setItems(mockItems)
+  }, [])
 
   const today = new Date().toLocaleDateString('en-US', { 
     weekday: 'long', 
@@ -68,12 +73,22 @@ export default function Checklist({ user }: ChecklistProps) {
         const newCompleted = !item.isCompleted
         if (newCompleted) {
           // Create a post when item is completed
-          toast.success('Task completed! Post created in your feed.')
+          const updatedItem = {
+            ...item,
+            isCompleted: newCompleted,
+            completedAt: new Date()
+          }
+          createChecklistPost(updatedItem, user.username)
+          setTimeout(() => {
+            const feedType = item.isPublic ? 'public' : 'private'
+            toast.success(`Task completed! Post created in your ${feedType} feed.`)
+          }, 0)
+          return updatedItem
         }
         return {
           ...item,
           isCompleted: newCompleted,
-          completedAt: newCompleted ? new Date() : undefined
+          completedAt: undefined
         }
       }
       return item
@@ -99,18 +114,26 @@ export default function Checklist({ user }: ChecklistProps) {
     setItems(prev => [...prev, newItem])
     setNewItemText('')
     setIsAddDialogOpen(false)
-    toast.success('Task added successfully!')
+    setTimeout(() => {
+      toast.success('Task added successfully!')
+    }, 0)
   }
 
   const handleDeleteItem = (itemId: string) => {
     const item = items.find(i => i.id === itemId)
-    if (item?.isCompleted) {
-      // Show options: delete item only or item + posts
-      toast.success('Task deleted (posts preserved)')
-    } else {
-      toast.success('Task deleted')
-    }
     setItems(prev => prev.filter(item => item.id !== itemId))
+    
+    if (item?.isCompleted) {
+      // Delete associated posts
+      const deletedCount = deletePostsByChecklistItem(itemId)
+      setTimeout(() => {
+        toast.success(`Task deleted along with ${deletedCount} associated post${deletedCount !== 1 ? 's' : ''}`)
+      }, 0)
+    } else {
+      setTimeout(() => {
+        toast.success('Task deleted')
+      }, 0)
+    }
   }
 
   return (
@@ -228,7 +251,12 @@ export default function Checklist({ user }: ChecklistProps) {
                     <div className="flex items-center space-x-3 flex-1">
                       <Checkbox
                         checked={item.isCompleted}
-                        onCheckedChange={() => handleToggleItem(item.id)}
+                        onCheckedChange={(checked) => {
+                          // Ensure the state update happens asynchronously
+                          if (typeof checked === 'boolean') {
+                            handleToggleItem(item.id)
+                          }
+                        }}
                         className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                       />
                       <div className="flex-1">
