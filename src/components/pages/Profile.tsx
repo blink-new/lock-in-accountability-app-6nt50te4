@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Edit3, Users, Trophy, Heart, Calendar, CheckCircle2, MoreHorizontal, MessageCircle, LogOut } from 'lucide-react'
+import { Settings, Edit3, Users, Trophy, Heart, Calendar, CheckCircle2, MoreHorizontal, MessageCircle, LogOut, Plus } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Avatar, AvatarFallback } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
-import { User, Post } from '../../types'
+import { User, Post, ChecklistItem } from '../../types'
 import { getUserPosts } from '../../utils/posts'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog'
+import { getChecklistItems, subscribeToChecklistUpdates } from '../../utils/checklist'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Switch } from '../ui/switch'
 
 interface ProfileProps {
@@ -20,6 +21,7 @@ export default function Profile({ user }: ProfileProps) {
   const [following] = useState(89)
   const [publicPosts, setPublicPosts] = useState<Post[]>([])
   const [privatePosts, setPrivatePosts] = useState<Post[]>([])
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Local copy of user settings for toggles
@@ -29,9 +31,17 @@ export default function Profile({ user }: ProfileProps) {
   const [allowTagging, setAllowTagging] = useState(user.settings.allowTagging)
 
   useEffect(() => {
-    // Load user's posts
+    // Load user's posts and checklist items
     setPublicPosts(getUserPosts(user.id, true))
     setPrivatePosts(getUserPosts(user.id, false))
+    setChecklistItems(getChecklistItems(user.id))
+    
+    // Subscribe to checklist updates
+    const unsubscribe = subscribeToChecklistUpdates(() => {
+      setChecklistItems(getChecklistItems(user.id))
+    })
+    
+    return unsubscribe
   }, [user.id])
 
   useEffect(() => {
@@ -112,41 +122,6 @@ export default function Profile({ user }: ProfileProps) {
   return (
     <div className="min-h-full p-4">
       <div className="space-y-6">
-        <Card className="glass-card">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Avatar className="w-20 h-20">
-                <AvatarFallback className="bg-primary text-white text-2xl font-bold">
-                  {user.username.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xl font-bold text-primary">@{user.username}</span>
-                  {user.isVerified && (
-                    <Badge variant="secondary" className="bg-primary/20 text-primary">
-                      ✓ verified
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">{user.bio || 'Building habits, one day at a time 🚀'}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm">
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit Profile
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}>
-                <Settings className="h-5 w-5 text-muted-foreground hover:text-foreground" />
-              </Button>
-              <Button variant="ghost" size="sm">
-                <LogOut className="h-5 w-5 text-muted-foreground hover:text-foreground" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Settings Dialog */}
         <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
           <DialogContent className="sm:max-w-md">
@@ -195,7 +170,7 @@ export default function Profile({ user }: ProfileProps) {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Building habits, one day at a time 🚀
+                    {user.bio || 'Building habits, one day at a time 🚀'}
                   </p>
                 </div>
               </div>
@@ -213,7 +188,7 @@ export default function Profile({ user }: ProfileProps) {
               </div>
             </div>
 
-            {/* Row 3: Stats */}
+            {/* Row 2: Stats */}
             <div className="grid grid-cols-4 gap-4 pt-4 border-t">
               {
                 [
