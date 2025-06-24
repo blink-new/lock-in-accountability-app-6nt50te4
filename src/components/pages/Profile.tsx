@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Edit3, Users, Trophy, Heart, Calendar, CheckCircle2, MoreHorizontal, MessageCircle, Plus } from 'lucide-react'
+import { Settings, Edit3, Users, Trophy, Heart, Calendar, CheckCircle2, MoreHorizontal, MessageCircle, LogOut } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Avatar, AvatarFallback } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
-import { User, Post, ChecklistItem } from '../../types'
+import { User, Post } from '../../types'
 import { getUserPosts } from '../../utils/posts'
-import { getChecklistItems, subscribeToChecklistUpdates } from '../../utils/checklist'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog'
+import { Switch } from '../ui/switch'
 
 interface ProfileProps {
   user: User
@@ -19,36 +20,33 @@ export default function Profile({ user }: ProfileProps) {
   const [following] = useState(89)
   const [publicPosts, setPublicPosts] = useState<Post[]>([])
   const [privatePosts, setPrivatePosts] = useState<Post[]>([])
-  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Local copy of user settings for toggles
+  const [allowAnyoneMessage, setAllowAnyoneMessage] = useState(user.settings.messaging === 'anyone')
+  const [allowFriendsMessage, setAllowFriendsMessage] = useState(user.settings.messaging === 'friends')
+  const [allowFollowersMessage, setAllowFollowersMessage] = useState(user.settings.messaging === 'followers')
+  const [allowTagging, setAllowTagging] = useState(user.settings.allowTagging)
 
   useEffect(() => {
-    // Load user's posts and checklist items
+    // Load user's posts
     setPublicPosts(getUserPosts(user.id, true))
     setPrivatePosts(getUserPosts(user.id, false))
-    setChecklistItems(getChecklistItems(user.id))
-    
-    // Subscribe to checklist updates
-    const unsubscribe = subscribeToChecklistUpdates(() => {
-      setChecklistItems(getChecklistItems(user.id))
-    })
-    
-    return unsubscribe
   }, [user.id])
 
-  // Refresh posts when checklist updates
   useEffect(() => {
     const interval = setInterval(() => {
       setPublicPosts(getUserPosts(user.id, true))
       setPrivatePosts(getUserPosts(user.id, false))
-    }, 1000) // Check every second for demo purposes
-
+    }, 1000)
     return () => clearInterval(interval)
   }, [user.id])
+
+  // TODO: Add save settings logic to backend or state management
 
   const formatTimeAgo = (date: Date) => {
     const now = new Date()
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-    
     if (diffInMinutes < 1) return 'now'
     if (diffInMinutes < 60) return `${diffInMinutes}m`
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`
@@ -63,7 +61,6 @@ export default function Profile({ user }: ProfileProps) {
     >
       <Card className="glass-card">
         <CardContent className="p-4">
-          {/* User Info */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center space-x-3">
               <Avatar className="w-10 h-10">
@@ -89,23 +86,15 @@ export default function Profile({ user }: ProfileProps) {
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </div>
-
-          {/* Post Content */}
           <div className="mb-3">
             <div className="flex items-start space-x-2">
               <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-sm leading-relaxed">{post.content}</p>
             </div>
           </div>
-
-          {/* Actions */}
           <div className="flex items-center justify-between pt-2 border-t border-border/50">
             <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex items-center space-x-1 text-muted-foreground hover:text-foreground"
-              >
+              <Button variant="ghost" size="sm" className="flex items-center space-x-1 text-muted-foreground hover:text-foreground">
                 <Heart className="h-4 w-4" />
                 <span className="text-xs">{post.likes.length}</span>
               </Button>
@@ -120,37 +109,72 @@ export default function Profile({ user }: ProfileProps) {
     </motion.div>
   )
 
-  const stats = [
-    {
-      label: 'Followers',
-      value: followers,
-      icon: Users,
-      color: 'text-blue-500'
-    },
-    {
-      label: 'Following',
-      value: following,
-      icon: Users,
-      color: 'text-green-500'
-    },
-    {
-      label: 'Streak',
-      value: user.streak,
-      icon: Trophy,
-      color: 'text-orange-500'
-    },
-    {
-      label: 'Likes',
-      value: user.totalLikes,
-      icon: Heart,
-      color: 'text-red-500'
-    }
-  ]
-
   return (
     <div className="min-h-full p-4">
       <div className="space-y-6">
-        {/* Profile Header */}
+        <Card className="glass-card">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Avatar className="w-20 h-20">
+                <AvatarFallback className="bg-primary text-white text-2xl font-bold">
+                  {user.username.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xl font-bold text-primary">@{user.username}</span>
+                  {user.isVerified && (
+                    <Badge variant="secondary" className="bg-primary/20 text-primary">
+                      ✓ verified
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">{user.bio || 'Building habits, one day at a time 🚀'}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm">
+                <Edit3 className="h-4 w-4 mr-2" />
+                Edit Profile
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}>
+                <Settings className="h-5 w-5 text-muted-foreground hover:text-foreground" />
+              </Button>
+              <Button variant="ghost" size="sm">
+                <LogOut className="h-5 w-5 text-muted-foreground hover:text-foreground" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Settings Dialog */}
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Settings</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span>Anyone can message me</span>
+                <Switch checked={allowAnyoneMessage} onCheckedChange={setAllowAnyoneMessage} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Friends can message me</span>
+                <Switch checked={allowFriendsMessage} onCheckedChange={setAllowFriendsMessage} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Followers can message me</span>
+                <Switch checked={allowFollowersMessage} onCheckedChange={setAllowFollowersMessage} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Users can tag me in comments</span>
+                <Switch checked={allowTagging} onCheckedChange={setAllowTagging} />
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Profile Stats and Feeds */}
         <Card className="glass-card">
           <CardContent className="p-6">
             {/* Row 1: Avatar, Username, Settings */}
@@ -180,29 +204,59 @@ export default function Profile({ user }: ProfileProps) {
                   <Edit3 className="h-4 w-4 mr-2" />
                   Edit Profile
                 </Button>
-                <Button variant="outline" size="sm">
-                  <Settings className="h-4 w-4" />
+                <Button variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}>
+                  <Settings className="h-5 w-5 text-muted-foreground hover:text-foreground" />
+                </Button>
+                <Button variant="ghost" size="sm">
+                  <LogOut className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                 </Button>
               </div>
             </div>
 
             {/* Row 3: Stats */}
             <div className="grid grid-cols-4 gap-4 pt-4 border-t">
-              {stats.map((stat, index) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="text-center"
-                >
-                  <div className="flex items-center justify-center mb-2">
-                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                  </div>
-                  <div className="text-2xl font-bold">{stat.value}</div>
-                  <div className="text-xs text-muted-foreground">{stat.label}</div>
-                </motion.div>
-              ))}
+              {
+                [
+                  {
+                    label: 'Followers',
+                    value: followers,
+                    icon: Users,
+                    color: 'text-blue-500'
+                  },
+                  {
+                    label: 'Following',
+                    value: following,
+                    icon: Users,
+                    color: 'text-green-500'
+                  },
+                  {
+                    label: 'Streak',
+                    value: user.streak,
+                    icon: Trophy,
+                    color: 'text-orange-500'
+                  },
+                  {
+                    label: 'Likes',
+                    value: user.totalLikes,
+                    icon: Heart,
+                    color: 'text-red-500'
+                  }
+                ].map((stat, index) => (
+                  <motion.div
+                    key={stat.label}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="text-center"
+                  >
+                    <div className="flex items-center justify-center mb-2">
+                      <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                    </div>
+                    <div className="text-2xl font-bold">{stat.value}</div>
+                    <div className="text-xs text-muted-foreground">{stat.label}</div>
+                  </motion.div>
+                ))
+              }
             </div>
           </CardContent>
         </Card>
