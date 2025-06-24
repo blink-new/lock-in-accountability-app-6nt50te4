@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Edit3, Users, Trophy, Heart, Calendar, CheckCircle2, MoreHorizontal, MessageCircle } from 'lucide-react'
+import { Settings, Edit3, Users, Trophy, Heart, Calendar, CheckCircle2, MoreHorizontal, MessageCircle, Plus } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Avatar, AvatarFallback } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
-import { User, Post } from '../../types'
+import { User, Post, ChecklistItem } from '../../types'
 import { getUserPosts } from '../../utils/posts'
+import { getChecklistItems, subscribeToChecklistUpdates } from '../../utils/checklist'
 
 interface ProfileProps {
   user: User
@@ -18,11 +19,20 @@ export default function Profile({ user }: ProfileProps) {
   const [following] = useState(89)
   const [publicPosts, setPublicPosts] = useState<Post[]>([])
   const [privatePosts, setPrivatePosts] = useState<Post[]>([])
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([])
 
   useEffect(() => {
-    // Load user's posts
+    // Load user's posts and checklist items
     setPublicPosts(getUserPosts(user.id, true))
     setPrivatePosts(getUserPosts(user.id, false))
+    setChecklistItems(getChecklistItems(user.id))
+    
+    // Subscribe to checklist updates
+    const unsubscribe = subscribeToChecklistUpdates(() => {
+      setChecklistItems(getChecklistItems(user.id))
+    })
+    
+    return unsubscribe
   }, [user.id])
 
   // Refresh posts when checklist updates
@@ -223,36 +233,105 @@ export default function Profile({ user }: ProfileProps) {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
-                    <div className="w-4 h-4 rounded border-2 border-primary bg-primary flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-sm" />
+                {checklistItems.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                      <Plus className="h-8 w-8 text-muted-foreground" />
                     </div>
-                    <span className="text-sm text-muted-foreground line-through">
-                      Morning meditation (10 minutes)
-                    </span>
+                    <h3 className="font-semibold mb-2">No tasks yet</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Go to the Checklist tab to create your first accountability task!
+                    </p>
                   </div>
-                  
-                  <div className="flex items-center space-x-3 p-3 bg-muted/30 rounded-lg">
-                    <div className="w-4 h-4 rounded border-2 border-muted-foreground" />
-                    <span className="text-sm">5K morning run</span>
+                ) : (
+                  <div className="space-y-3">
+                    {checklistItems.map((item, index) => (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className={`flex items-center space-x-3 p-3 rounded-lg border transition-all duration-200 ${
+                          item.isCompleted 
+                            ? 'bg-primary/5 border-primary/20' 
+                            : 'bg-muted/30 border-border'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          item.isCompleted
+                            ? 'border-primary bg-primary'
+                            : 'border-muted-foreground'
+                        }`}>
+                          {item.isCompleted && (
+                            <div className="w-2 h-2 bg-white rounded-sm" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <span className={`text-sm ${
+                            item.isCompleted 
+                              ? 'text-muted-foreground line-through' 
+                              : 'text-foreground'
+                          }`}>
+                            {item.text}
+                          </span>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              item.type === 'daily' 
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' 
+                                : 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300'
+                            }`}>
+                              {item.type === 'daily' ? 'Daily' : 'One-off'}
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              item.isPublic 
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
+                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                            }`}>
+                              {item.isPublic ? 'Public' : 'Private'}
+                            </span>
+                            {item.completedAt && (
+                              <span className="text-xs text-muted-foreground">
+                                Completed {item.completedAt.toLocaleTimeString('en-US', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit',
+                                  hour12: false 
+                                })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
-                  
-                  <div className="flex items-center space-x-3 p-3 bg-muted/30 rounded-lg">
-                    <div className="w-4 h-4 rounded border-2 border-muted-foreground" />
-                    <span className="text-sm">Read for 30 minutes</span>
-                  </div>
-                </div>
+                )}
                 
-                <div className="mt-6 p-4 bg-muted/30 rounded-lg">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary mb-2">33%</div>
-                    <div className="text-sm text-muted-foreground">Today's Progress</div>
-                    <div className="w-full bg-muted rounded-full h-2 mt-2">
-                      <div className="bg-primary h-2 rounded-full transition-all duration-300" style={{ width: '33%' }} />
+                {checklistItems.length > 0 && (
+                  <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-primary mb-2">
+                        {checklistItems.length > 0 
+                          ? Math.round((checklistItems.filter(item => item.isCompleted).length / checklistItems.length) * 100) 
+                          : 0}%
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-2">Today's Progress</div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all duration-300" 
+                          style={{ 
+                            width: `${checklistItems.length > 0 
+                              ? Math.round((checklistItems.filter(item => item.isCompleted).length / checklistItems.length) * 100) 
+                              : 0}%` 
+                          }} 
+                        />
+                      </div>
+                      <div className="flex justify-center space-x-4 mt-3 text-xs text-muted-foreground">
+                        <span>{checklistItems.filter(item => item.isCompleted).length} completed</span>
+                        <span>•</span>
+                        <span>{checklistItems.length - checklistItems.filter(item => item.isCompleted).length} remaining</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

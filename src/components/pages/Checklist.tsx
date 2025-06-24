@@ -11,43 +11,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../ui/alert-dialog'
 import { User, ChecklistItem } from '../../types'
 import { createChecklistPost, deletePostsByChecklistItem } from '../../utils/posts'
+import { getChecklistItems, addChecklistItem, deleteChecklistItem, toggleChecklistItem, subscribeToChecklistUpdates } from '../../utils/checklist'
 import toast from 'react-hot-toast'
 
 interface ChecklistProps {
   user: User
 }
-
-// Mock checklist items
-const mockItems: ChecklistItem[] = [
-  {
-    id: '1',
-    userId: 'current-user',
-    text: 'Morning meditation (10 minutes)',
-    isCompleted: true,
-    isPublic: true,
-    type: 'daily',
-    createdAt: new Date(),
-    completedAt: new Date()
-  },
-  {
-    id: '2',
-    userId: 'current-user',
-    text: '5K morning run',
-    isCompleted: false,
-    isPublic: true,
-    type: 'daily',
-    createdAt: new Date()
-  },
-  {
-    id: '3',
-    userId: 'current-user',
-    text: 'Call mom',
-    isCompleted: false,
-    isPublic: false,
-    type: 'oneoff',
-    createdAt: new Date()
-  }
-]
 
 export default function Checklist({ user }: ChecklistProps) {
   const [items, setItems] = useState<ChecklistItem[]>([])
@@ -57,8 +26,16 @@ export default function Checklist({ user }: ChecklistProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
   useEffect(() => {
-    setItems(mockItems)
-  }, [])
+    // Load initial items
+    setItems(getChecklistItems(user.id))
+    
+    // Subscribe to updates
+    const unsubscribe = subscribeToChecklistUpdates(() => {
+      setItems(getChecklistItems(user.id))
+    })
+    
+    return unsubscribe
+  }, [user.id])
 
   const today = new Date().toLocaleDateString('en-US', { 
     weekday: 'long', 
@@ -68,31 +45,15 @@ export default function Checklist({ user }: ChecklistProps) {
   })
 
   const handleToggleItem = (itemId: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        const newCompleted = !item.isCompleted
-        if (newCompleted) {
-          // Create a post when item is completed
-          const updatedItem = {
-            ...item,
-            isCompleted: newCompleted,
-            completedAt: new Date()
-          }
-          createChecklistPost(updatedItem, user.username)
-          setTimeout(() => {
-            const feedType = item.isPublic ? 'public' : 'private'
-            toast.success(`Task completed! Post created in your ${feedType} feed.`)
-          }, 0)
-          return updatedItem
-        }
-        return {
-          ...item,
-          isCompleted: newCompleted,
-          completedAt: undefined
-        }
-      }
-      return item
-    }))
+    const updatedItem = toggleChecklistItem(itemId)
+    if (updatedItem && updatedItem.isCompleted) {
+      // Create a post when item is completed
+      createChecklistPost(updatedItem, user.username)
+      setTimeout(() => {
+        const feedType = updatedItem.isPublic ? 'public' : 'private'
+        toast.success(`Task completed! Post created in your ${feedType} feed.`)
+      }, 0)
+    }
   }
 
   const handleAddItem = () => {
@@ -111,7 +72,7 @@ export default function Checklist({ user }: ChecklistProps) {
       createdAt: new Date()
     }
 
-    setItems(prev => [...prev, newItem])
+    addChecklistItem(newItem)
     setNewItemText('')
     setIsAddDialogOpen(false)
     setTimeout(() => {
@@ -121,15 +82,15 @@ export default function Checklist({ user }: ChecklistProps) {
 
   const handleDeleteItem = (itemId: string) => {
     const item = items.find(i => i.id === itemId)
-    setItems(prev => prev.filter(item => item.id !== itemId))
+    const deleted = deleteChecklistItem(itemId)
     
-    if (item?.isCompleted) {
+    if (deleted && item?.isCompleted) {
       // Delete associated posts
       const deletedCount = deletePostsByChecklistItem(itemId)
       setTimeout(() => {
         toast.success(`Task deleted along with ${deletedCount} associated post${deletedCount !== 1 ? 's' : ''}`)
       }, 0)
-    } else {
+    } else if (deleted) {
       setTimeout(() => {
         toast.success('Task deleted')
       }, 0)
